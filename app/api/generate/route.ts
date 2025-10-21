@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
 import rateLimit from "express-rate-limit";
 
-// 🧠 Create a rate limiter: 10 requests per 5 minutes per IP
+// ✅ Ensure this route uses Node.js runtime (not Edge)
+export const runtime = "nodejs";
+
+// 🧠 Rate limiter: 10 requests per 5 minutes per IP
 const limiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 10, // max requests per IP
-  message: "Too many requests from this IP. Please try again in a few minutes.",
-  standardHeaders: true, // Return rate limit info in headers
-  legacyHeaders: false,  // Disable deprecated headers
+  message: "Too many requests from this IP. Please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 export async function POST(req: Request) {
   try {
-    // 🧱 Run limiter manually (Express-style middleware inside Next.js)
+    // 🧱 Run limiter manually
     await new Promise((resolve, reject) =>
-      // @ts-ignore - Express limiter isn't typed for Next.js
+      // @ts-ignore
       limiter(req, {} as any, (result: any) =>
         result instanceof Error ? reject(result) : resolve(result)
       )
@@ -29,7 +32,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🧩 Call OpenAI API (securely server-side)
+    // 🔒 Securely call OpenAI API
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -42,11 +45,11 @@ export async function POST(req: Request) {
           {
             role: "system",
             content:
-              "You are an expert career assistant who tailors resumes professionally to job descriptions.",
+              "You are an expert resume writer who tailors resumes professionally.",
           },
           {
             role: "user",
-            content: `Here is my resume:\n\n${resumeText}\n\nHere is the job description:\n\n${jobDescription}\n\nTailor my resume to this job.`,
+            content: `Here is my resume:\n\n${resumeText}\n\nHere is the job description:\n\n${jobDescription}\n\nPlease tailor my resume accordingly.`,
           },
         ],
         temperature: 0.7,
