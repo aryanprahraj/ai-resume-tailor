@@ -1,27 +1,34 @@
 import { NextResponse } from "next/server";
-import rateLimit from "express-rate-limit";
 
-// ✅ Ensure this route uses Node.js runtime (not Edge)
-export const runtime = "nodejs";
+export const runtime = "nodejs"; // ✅ Use Node.js runtime
 
-// 🧠 Rate limiter: 10 requests per 5 minutes per IP
-const limiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 10, // max requests per IP
-  message: "Too many requests from this IP. Please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// 🧠 Simple in-memory rate limiter
+const RATE_LIMIT_WINDOW = 5 * 60 * 1000; // 5 minutes
+const MAX_REQUESTS = 10;
+const ipTracker = new Map<string, { count: number; firstRequestTime: number }>();
 
 export async function POST(req: Request) {
   try {
-    // 🧱 Run limiter manually
-    await new Promise((resolve, reject) =>
-      // @ts-ignore
-      limiter(req, {} as any, (result: any) =>
-        result instanceof Error ? reject(result) : resolve(result)
-      )
-    );
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const now = Date.now();
+
+    // 🧩 Track IP requests
+    const record = ipTracker.get(ip);
+    if (record) {
+      if (now - record.firstRequestTime < RATE_LIMIT_WINDOW) {
+        if (record.count >= MAX_REQUESTS) {
+          return NextResponse.json(
+            { error: "Too many requests. Please try again later." },
+            { status: 429 }
+          );
+        }
+        record.count++;
+      } else {
+        ipTracker.set(ip, { count: 1, firstRequestTime: now });
+      }
+    } else {
+      ipTracker.set(ip, { count: 1, firstRequestTime: now });
+    }
 
     const { resumeText, jobDescription } = await req.json();
 
@@ -32,7 +39,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔒 Securely call OpenAI API
+    // 🧩 OpenAI API call
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
